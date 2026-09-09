@@ -16,12 +16,8 @@ from litellm.types.guardrails import GuardrailEventHooks
 @pytest.mark.parametrize("input_type", ["request", "response"])
 @pytest.mark.parametrize("action", ["block", "monitor", "passthrough"])
 @pytest.mark.parametrize("fail_open", [False, True])
-@pytest.mark.parametrize(
-    "payload", [{}, {"violation": None}, {"error": True, "violation": 0.0}]
-)
-async def test_application_errors_respect_failure_policy(
-    monkeypatch, input_type, action, fail_open, payload
-):
+@pytest.mark.parametrize("payload", [{}, {"violation": None}, {"error": True, "violation": 0.0}])
+async def test_application_errors_respect_failure_policy(monkeypatch, input_type, action, fail_open, payload):
     guardrail = GraySwanGuardrail(
         guardrail_name="response-contract",
         api_key="test-key",
@@ -68,13 +64,12 @@ async def test_application_errors_respect_failure_policy(
 @pytest.mark.parametrize("legacy", [False, True])
 def test_invalid_decisions_are_errors(payload, legacy):
     guardrail = GraySwanGuardrail(guardrail_name="invalid-decision", api_key="test-key")
-    with pytest.raises(GraySwanGuardrailAPIError):
-        if legacy:
+    if legacy:
+        with pytest.raises(GraySwanGuardrailAPIError):
             guardrail._process_grayswan_response(payload)
-        else:
-            guardrail._process_response_internal(
-                payload, {}, {"texts": ["hello"]}, False
-            )
+    else:
+        with pytest.raises(GraySwanGuardrailAPIError):
+            guardrail._process_response_internal(payload, {}, {"texts": ["hello"]}, False)
 
 
 @pytest.mark.parametrize("score", [0, 0.49, 0.5, 1])
@@ -99,9 +94,7 @@ def test_valid_decisions_keep_threshold_semantics(score):
             guardrail._process_response_internal(payload, {}, inputs, False)
         assert error.value.status_code == 400
     else:
-        assert (
-            guardrail._process_response_internal(payload, {}, inputs, False) is inputs
-        )
+        assert guardrail._process_response_internal(payload, {}, inputs, False) is inputs
 
 
 @pytest.mark.asyncio

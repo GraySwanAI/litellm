@@ -71,17 +71,11 @@ class GraySwanGuardrailAPIError(Exception):
 def _validated_violation_score(response_json: _GraySwanMonitorResponse) -> float:
     """Do not interpret an unevaluated or malformed response as a clean decision."""
     if not isinstance(response_json, dict):
-        raise GraySwanGuardrailAPIError(
-            "Gray Swan returned an invalid monitor response"
-        )
+        raise GraySwanGuardrailAPIError("Gray Swan returned an invalid monitor response")
     if response_json.get("error"):
         raise GraySwanGuardrailAPIError("Gray Swan moderation failed")
-    score = response_json.get("violation")
-    if (
-        isinstance(score, bool)
-        or not isinstance(score, (int, float))
-        or not 0 <= score <= 1
-    ):
+    score: Final = response_json.get("violation")
+    if isinstance(score, bool) or not isinstance(score, (int, float)) or not 0 <= score <= 1:
         raise GraySwanGuardrailAPIError("Gray Swan returned an invalid violation score")
     return float(score)
 
@@ -156,9 +150,7 @@ class GraySwanGuardrail(CustomGuardrail):
         self.categories = categories
         self.policy_id = policy_id
         self.fail_open = True if fail_open is None else bool(fail_open)
-        self.guardrail_timeout = (
-            30.0 if guardrail_timeout is None else float(guardrail_timeout)
-        )
+        self.guardrail_timeout = 30.0 if guardrail_timeout is None else float(guardrail_timeout)
 
         # Streaming configuration
         self.streaming_end_of_stream_only = streaming_end_of_stream_only
@@ -261,18 +253,12 @@ class GraySwanGuardrail(CustomGuardrail):
         messages: Final = [{"role": role, "content": text} for text in texts]
 
         # Get dynamic params from request metadata
-        dynamic_body: Final = (
-            self.get_guardrail_dynamic_request_body_params(request_data) or {}
-        )
+        dynamic_body: Final = self.get_guardrail_dynamic_request_body_params(request_data) or {}
         if dynamic_body:
-            verbose_proxy_logger.debug(
-                "Gray Swan Guardrail: dynamic extra_body=%s", safe_dumps(dynamic_body)
-            )
+            verbose_proxy_logger.debug("Gray Swan Guardrail: dynamic extra_body=%s", safe_dumps(dynamic_body))
 
         # Prepare and send payload
-        payload: Final = self._prepare_payload(
-            messages, dynamic_body, request_data, logging_obj
-        )
+        payload: Final = self._prepare_payload(messages, dynamic_body, request_data, logging_obj)
         if payload is None:
             return inputs
 
@@ -291,9 +277,7 @@ class GraySwanGuardrail(CustomGuardrail):
             if self._is_grayswan_exception(exc):
                 raise
             end_time: Final = time.time()
-            status_code: Final = getattr(exc, "status_code", None) or getattr(
-                exc, "exception_status_code", None
-            )
+            status_code: Final = getattr(exc, "status_code", None) or getattr(exc, "exception_status_code", None)
             self._log_guardrail_failure(
                 exc=exc,
                 request_data=request_data or {},
@@ -325,9 +309,7 @@ class GraySwanGuardrail(CustomGuardrail):
     # Legacy Test Interface (for backward compatibility)
     # ------------------------------------------------------------------
 
-    async def run_grayswan_guardrail(
-        self, payload: dict[str, object]
-    ) -> _GraySwanMonitorResponse:
+    async def run_grayswan_guardrail(self, payload: dict[str, object]) -> _GraySwanMonitorResponse:
         """
         Run the GraySwan guardrail on a payload.
 
@@ -416,12 +398,8 @@ class GraySwanGuardrail(CustomGuardrail):
         elif self.on_flagged_action == "passthrough":
             # For passthrough mode, we need to handle violations
             detections: Final = [detection_info]
-            violation_message: Final = self._format_violation_message(
-                detections, is_output=not is_input
-            )
-            verbose_proxy_logger.info(
-                "Gray Swan Guardrail: Passthrough mode - handling violation"
-            )
+            violation_message: Final = self._format_violation_message(detections, is_output=not is_input)
+            verbose_proxy_logger.info("Gray Swan Guardrail: Passthrough mode - handling violation")
 
             # If hook_type is provided and in pre/during call, raise exception
             if hook_type in [
@@ -450,9 +428,7 @@ class GraySwanGuardrail(CustomGuardrail):
     # Core GraySwan API interaction
     # ------------------------------------------------------------------
 
-    async def _call_grayswan_api(
-        self, payload: dict[str, object]
-    ) -> _GraySwanMonitorResponse:
+    async def _call_grayswan_api(self, payload: dict[str, object]) -> _GraySwanMonitorResponse:
         """Call the GraySwan monitoring API."""
         headers: Final = self._prepare_headers()
 
@@ -465,14 +441,10 @@ class GraySwanGuardrail(CustomGuardrail):
             )
             response.raise_for_status()
             result: Final = response.json()
-            verbose_proxy_logger.debug(
-                "Gray Swan Guardrail: monitor response %s", safe_dumps(result)
-            )
+            verbose_proxy_logger.debug("Gray Swan Guardrail: monitor response %s", safe_dumps(result))
             return result
         except Exception as exc:
-            status_code: Final = getattr(exc, "status_code", None) or getattr(
-                exc, "exception_status_code", None
-            )
+            status_code: Final = getattr(exc, "status_code", None) or getattr(exc, "exception_status_code", None)
             raise GraySwanGuardrailAPIError(str(exc), status_code=status_code) from exc
 
     def _process_response_internal(
@@ -540,15 +512,11 @@ class GraySwanGuardrail(CustomGuardrail):
                 },
             )
         elif self.on_flagged_action == "monitor":
-            verbose_proxy_logger.info(
-                "Gray Swan Guardrail: Monitoring mode - allowing flagged content"
-            )
+            verbose_proxy_logger.info("Gray Swan Guardrail: Monitoring mode - allowing flagged content")
             return inputs
         elif self.on_flagged_action == "passthrough":
             # Replace content with violation message
-            violation_message: Final = self._format_violation_message(
-                detection_info, is_output=is_output
-            )
+            violation_message: Final = self._format_violation_message(detection_info, is_output=is_output)
             verbose_proxy_logger.info(
                 "Gray Swan Guardrail: Passthrough mode - replacing content with violation message"
             )
@@ -589,16 +557,9 @@ class GraySwanGuardrail(CustomGuardrail):
             headers = request_data.get("headers")
         if not headers:
             headers = (request_data.get("metadata") or {}).get("headers")
-        if (
-            not headers
-            and logging_obj
-            and getattr(logging_obj, "model_call_details", None)
-        ):
+        if not headers and logging_obj and getattr(logging_obj, "model_call_details", None):
             headers = (
-                (logging_obj.model_call_details or {})
-                .get("litellm_params", {})
-                .get("metadata", {})
-                .get("headers")
+                (logging_obj.model_call_details or {}).get("litellm_params", {}).get("metadata", {}).get("headers")
             )
         if not isinstance(headers, dict):
             return None
@@ -627,9 +588,7 @@ class GraySwanGuardrail(CustomGuardrail):
         if policy_id:
             payload["policy_id"] = policy_id
 
-        reasoning_mode: Final = (
-            dynamic_body.get("reasoning_mode") or self.reasoning_mode
-        )
+        reasoning_mode: Final = dynamic_body.get("reasoning_mode") or self.reasoning_mode
         if reasoning_mode:
             payload["reasoning_mode"] = reasoning_mode
 
@@ -637,33 +596,23 @@ class GraySwanGuardrail(CustomGuardrail):
         if "metadata" in dynamic_body:
             payload["metadata"] = dynamic_body["metadata"]
 
-        inbound_headers: Final = self._extract_inbound_headers(
-            request_data, logging_obj
-        )
+        inbound_headers: Final = self._extract_inbound_headers(request_data, logging_obj)
 
         litellm_metadata: Final = request_data.get("litellm_metadata")
-        cleaned_litellm_metadata: Final = (
-            dict(litellm_metadata) if isinstance(litellm_metadata, dict) else {}
-        )
+        cleaned_litellm_metadata: Final = dict(litellm_metadata) if isinstance(litellm_metadata, dict) else {}
         if inbound_headers:
             existing_headers: Final = cleaned_litellm_metadata.get("headers")
             cleaned_litellm_metadata["headers"] = (
-                {**existing_headers, **inbound_headers}
-                if isinstance(existing_headers, dict)
-                else inbound_headers
+                {**existing_headers, **inbound_headers} if isinstance(existing_headers, dict) else inbound_headers
             )
         if cleaned_litellm_metadata:
-            sanitized: Final[object] = safe_json_loads(
-                safe_dumps(cleaned_litellm_metadata), default={}
-            )
+            sanitized: Final[object] = safe_json_loads(safe_dumps(cleaned_litellm_metadata), default={})
             if isinstance(sanitized, dict) and sanitized:
                 payload["litellm_metadata"] = sanitized
 
         return payload
 
-    def _format_violation_message(
-        self, detection_info: object, is_output: bool = False
-    ) -> str:
+    def _format_violation_message(self, detection_info: object, is_output: bool = False) -> str:
         """
         Format detection info into a user-friendly violation message.
 
@@ -681,9 +630,7 @@ class GraySwanGuardrail(CustomGuardrail):
             detection_info = detection_info[0]
 
         # Extract fields from detection_info dict
-        detection_dict: Final[dict] = (
-            detection_info if isinstance(detection_info, dict) else {}
-        )
+        detection_dict: Final[dict] = detection_info if isinstance(detection_info, dict) else {}
         violation_score: Final = detection_dict.get("violation_score", 0.0)
         violated_rules: Final = detection_dict.get("violated_rules", [])
         mutation: Final = detection_dict.get("mutation", False)
@@ -699,14 +646,10 @@ class GraySwanGuardrail(CustomGuardrail):
         if violated_rules:
             formatted_rules: Final = self._format_violated_rules(violated_rules)
             if formatted_rules:
-                message_parts.append(
-                    f"It was violating the rule(s): {formatted_rules}."
-                )
+                message_parts.append(f"It was violating the rule(s): {formatted_rules}.")
 
         if mutation:
-            message_parts.append(
-                "Mutation effort to make the harmful intention disguised was DETECTED."
-            )
+            message_parts.append("Mutation effort to make the harmful intention disguised was DETECTED.")
 
         if ipi:
             message_parts.append("Indirect Prompt Injection was DETECTED.")

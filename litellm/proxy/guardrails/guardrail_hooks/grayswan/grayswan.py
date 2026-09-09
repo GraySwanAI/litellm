@@ -2,9 +2,11 @@
 
 import os
 import time
+from collections.abc import Mapping
 from typing import TYPE_CHECKING, Any, Final, Literal, Optional, Protocol
 
 from fastapi import HTTPException
+from pydantic import TypeAdapter, ValidationError
 from typing_extensions import NotRequired, ReadOnly, TypedDict
 
 from litellm._logging import verbose_proxy_logger
@@ -26,6 +28,7 @@ if TYPE_CHECKING:
     from litellm.litellm_core_utils.litellm_logging import Logging as LiteLLMLoggingObj
 
 GRAYSWAN_BLOCK_ERROR_MSG: Final = "Blocked by Gray Swan Guardrail"
+_MONITOR_RESPONSE_ADAPTER: Final = TypeAdapter(Mapping[str, object])
 
 
 class _GraySwanMonitorResponse(TypedDict):
@@ -68,13 +71,15 @@ class GraySwanGuardrailAPIError(Exception):
         self.status_code = status_code
 
 
-def _validated_violation_score(response_json: _GraySwanMonitorResponse) -> float:
+def _validated_violation_score(response_json: object) -> float:
     """Do not interpret an unevaluated or malformed response as a clean decision."""
-    if not isinstance(response_json, dict):
-        raise GraySwanGuardrailAPIError("Gray Swan returned an invalid monitor response")
-    if response_json.get("error"):
+    try:
+        response: Final = _MONITOR_RESPONSE_ADAPTER.validate_python(response_json, strict=True)
+    except ValidationError:
+        raise GraySwanGuardrailAPIError("Gray Swan returned an invalid monitor response") from None
+    if response.get("error"):
         raise GraySwanGuardrailAPIError("Gray Swan moderation failed")
-    score: Final = response_json.get("violation")
+    score: Final = response.get("violation")
     if isinstance(score, bool) or not isinstance(score, (int, float)) or not 0 <= score <= 1:
         raise GraySwanGuardrailAPIError("Gray Swan returned an invalid violation score")
     return float(score)
